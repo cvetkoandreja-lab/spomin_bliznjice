@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="sl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Spomin – bližnjice na tipkovnici</title>
+
+  <style>
+    html, body {
+      height: 100%;
+      margin: 0;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    body {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      color: white;
+    }
+
+    .wrap {
+      width: min(1000px, 100%);
+      padding: 28px 18px 36px;
+      box-sizing: border-box;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 12px;
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.25);
+    }
+
+    .bar {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .pill {
+      background: rgba(255,255,255,0.18);
+      border: 1px solid rgba(255,255,255,0.3);
+      padding: 8px 14px;
+      border-radius: 999px;
+      font-weight: 600;
+    }
+
+    button {
+      border: none;
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      color: white;
+      font-weight: 700;
+      padding: 9px 18px;
+      border-radius: 999px;
+      cursor: pointer;
+    }
+
+    button:hover {
+      filter: brightness(0.95);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      padding: 6px;
+    }
+
+    @media (max-width: 800px) {
+      .grid { grid-template-columns: repeat(3, 1fr); }
+    }
+
+    @media (max-width: 520px) {
+      .grid { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    .card {
+      aspect-ratio: 1;
+      position: relative;
+      cursor: pointer;
+      transform-style: preserve-3d;
+      transition: transform 0.6s;
+    }
+
+    .card.flipped {
+      transform: rotateY(180deg);
+    }
+
+    /* 🔒 KLJUČNI POPRAVEK – ujemani pari ostanejo obrnjeni */
+    .card.matched {
+      transform: rotateY(180deg) !important;
+      pointer-events: none;
+    }
+
+    .face {
+      position: absolute;
+      inset: 0;
+      border-radius: 14px;
+      backface-visibility: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 14px;
+      text-align: center;
+      font-weight: 800;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+      word-break: break-word;
+    }
+
+    .back {
+      background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+      font-size: 34px;
+    }
+
+    .front {
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+      transform: rotateY(180deg);
+      font-size: 18px;
+      line-height: 1.2;
+    }
+
+    .win {
+      margin-top: 18px;
+      text-align: center;
+      font-size: 18px;
+      font-weight: 800;
+      opacity: 0;
+      transition: opacity 0.4s;
+    }
+
+    .win.show {
+      opacity: 1;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="wrap">
+    <h1>Spomin: bližnjice na tipkovnici</h1>
+
+    <div class="bar">
+      <div class="pill">Poteze: <span id="moves">0</span></div>
+      <div class="pill">Najdeni pari: <span id="found">0</span>/6</div>
+      <button id="newGame">Nova igra</button>
+    </div>
+
+    <div class="grid" id="grid"></div>
+    <div class="win" id="win">🎉 Čestitke! Našli ste vse pare! 🎉</div>
+  </div>
+
+  <script>
+    const PAIRS = [
+      { shortcut: "Ctrl + C", meaning: "Kopiraj" },
+      { shortcut: "Ctrl + V", meaning: "Prilepi" },
+      { shortcut: "Ctrl + X", meaning: "Izreži" },
+      { shortcut: "Ctrl + Z", meaning: "Razveljavi" },
+      { shortcut: "Ctrl + S", meaning: "Shrani" },
+      { shortcut: "Ctrl + A", meaning: "Označi vse" }
+    ];
+
+    let deck = [];
+    let opened = [];
+    let locked = false;
+    let moves = 0;
+    let found = 0;
+
+    const grid = document.getElementById("grid");
+    const movesEl = document.getElementById("moves");
+    const foundEl = document.getElementById("found");
+    const winEl = document.getElementById("win");
+
+    function shuffle(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function buildDeck() {
+      let d = [];
+      PAIRS.forEach((p, i) => {
+        d.push({ id: "s" + i, pair: i, text: p.shortcut, type: "s" });
+        d.push({ id: "m" + i, pair: i, text: p.meaning, type: "m" });
+      });
+      return shuffle(d);
+    }
+
+    function render() {
+      grid.innerHTML = "";
+      deck.forEach(card => {
+        const el = document.createElement("div");
+        el.className = "card";
+        el.dataset.id = card.id;
+
+        el.innerHTML = `
+          <div class="face back">❓</div>
+          <div class="face front">${card.text}</div>
+        `;
+
+        el.addEventListener("click", () => flip(card.id));
+        grid.appendChild(el);
+      });
+    }
+
+    function flip(id) {
+      if (locked) return;
+
+      const el = grid.querySelector(`[data-id="${id}"]`);
+      if (!el || el.classList.contains("flipped") || el.classList.contains("matched")) return;
+
+      el.classList.add("flipped");
+      opened.push(id);
+
+      if (opened.length === 2) {
+        locked = true;
+        moves++;
+        movesEl.textContent = moves;
+        check();
+      }
+    }
+
+    function check() {
+      const [aId, bId] = opened;
+      const a = deck.find(c => c.id === aId);
+      const b = deck.find(c => c.id === bId);
+
+      const match = a.pair === b.pair && a.type !== b.type;
+
+      setTimeout(() => {
+        const elA = grid.querySelector(`[data-id="${aId}"]`);
+        const elB = grid.querySelector(`[data-id="${bId}"]`);
+
+        if (match) {
+          elA.classList.add("matched", "flipped");
+          elB.classList.add("matched", "flipped");
+          found++;
+          foundEl.textContent = found;
+
+          if (found === PAIRS.length) {
+            winEl.classList.add("show");
+          }
+        } else {
+          elA.classList.remove("flipped");
+          elB.classList.remove("flipped");
+        }
+
+        opened = [];
+        locked = false;
+      }, 700);
+    }
+
+    function newGame() {
+      deck = buildDeck();
+      opened = [];
+      locked = false;
+      moves = 0;
+      found = 0;
+      movesEl.textContent = "0";
+      foundEl.textContent = "0";
+      winEl.classList.remove("show");
+      render();
+    }
+
+    document.getElementById("newGame").addEventListener("click", newGame);
+    newGame();
+  </script>
+</body>
+</html>
